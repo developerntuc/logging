@@ -10,7 +10,6 @@ import (
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/opentracing/opentracing-go"
 	zipkin "github.com/openzipkin-contrib/zipkin-go-opentracing"
-	"gopkg.in/tokopedia/logging.v1"
 )
 
 // References
@@ -74,7 +73,7 @@ func InitZipkin(tcfg *Config) {
 		return
 	}
 
-	logging.Debug.Println(logText)
+	log.Println(logText)
 	var hostPort string
 	if tcfg.ServerName == "" {
 		hostPort = fmt.Sprintf("127.0.0.1:%d", tcfg.Port)
