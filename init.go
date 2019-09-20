@@ -1,4 +1,4 @@
-// The logging package provides common functionality as log rotation, conditional debug logging etc.
+// Package logging provides common functionality as log rotation, conditional debug logging etc.
 // To initialize this package, just import it as
 // import "gopkg.in/tokopedia/logging.v1
 package logging
@@ -15,11 +15,15 @@ import (
 
 var stdoutLog string
 var stderrLog string
+
+// separating debug log into a specific file to ease monitoring process
+var debugLog string
+
 var debugFlag bool
 var versionFlag bool
 
-// global logger for debug messages
-//  logging.Debug.Println("debug message")
+// Debug global logger for debug messages
+// logging.Debug.Println("debug message")
 // debug messages are printed only when the program is started with -debug flag
 var Debug *log.Logger
 
@@ -28,6 +32,7 @@ var Debug *log.Logger
 func init() {
 	flag.StringVar(&stdoutLog, "l", "", "log file for stdout")
 	flag.StringVar(&stderrLog, "e", "", "log file for stderr")
+	flag.StringVar(&debugLog, "d", "", "log file for debug") // only if to use debugLog
 	flag.BoolVar(&versionFlag, "version", false, "binary version")
 	flag.BoolVar(&debugFlag, "debug", false, "enable debug logging")
 
@@ -49,10 +54,10 @@ func sigHandler(c chan os.Signal) {
 	}
 }
 
-// App must call LogInit once to setup log redirection
+// LogInit App must call LogInit once to setup log redirection
 func LogInit() {
 
-	if versionFlag == true {
+	if versionFlag {
 		fmt.Println(appVersion())
 		os.Exit(0)
 	}
@@ -61,38 +66,48 @@ func LogInit() {
 		log.Println("Log Init: using ", stdoutLog, stderrLog)
 	}
 
-	reopen(1, stdoutLog)
-	reopen(2, stderrLog)
+	_, _ = reopen(1, stdoutLog)
+	_, _ = reopen(2, stderrLog)
 
 	SetDebug(debugFlag)
 }
 
+// SetDebug set debug
 func SetDebug(enabled bool) {
 	if enabled {
 		debugFlag = true
-		Debug = log.New(os.Stdout, "debug:", log.Ldate|log.Ltime|log.Lshortfile)
+		f, err := reopen(0, debugLog)
+		if f == nil || err != nil {
+			f = os.Stdout
+		}
+
+		Debug = log.New(f, "debug:", log.Ldate|log.Ltime|log.Lshortfile)
 		Debug.Println("---- debug mode ----")
 	}
 }
 
-// Determine if we are running in debug mode or not
+// IsDebug Determine if we are running in debug mode or not
 func IsDebug() bool {
 	return debugFlag
 }
 
-func reopen(fd int, filename string) {
+func reopen(fd int, filename string) (*os.File, error) {
 	if filename == "" {
-		return
+		return nil, fmt.Errorf("Empty log file for fd: %d", fd)
 	}
 
 	logFile, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
-
-	if err != nil {
+	if fd != 0 && err != nil {
+		// do not terminate in case of debug file open error
 		log.Println("Error in opening ", filename, err)
 		os.Exit(2)
 	}
 
-	if err = syscall.Dup2(int(logFile.Fd()), fd); err != nil {
-		log.Println("Failed to dup", filename)
+	if fd != 0 {
+		if err = syscall.Dup2(int(logFile.Fd()), fd); err != nil {
+			log.Println("Failed to dup", filename)
+		}
 	}
+
+	return logFile, err
 }
